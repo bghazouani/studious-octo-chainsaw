@@ -1,0 +1,1 @@
+yara -r SuspiciousFileDetection.yara /path/to/files
