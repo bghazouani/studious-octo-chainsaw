@@ -1,0 +1,18 @@
+rule SuspiciousFileDetection
+{
+    meta:
+        author = "YourName"
+        description = "Detects files with suspicious strings or patterns"
+        date = "2024-12-20"
+        version = "1.0"
+
+    strings:
+        $malicious_string_1 = "cmd.exe /c"          // Command line execution
+        $malicious_string_2 = "powershell.exe"     // PowerShell usage
+        $malicious_string_3 = "0xdeadbeef"         // Example of a hex pattern
+        $suspicious_url = /https?:\/\/\S+\.(com|exe|zip)/ // Regex for suspicious URLs
+        $encoded_payload = { 50 61 79 6C 6F 61 64 } // Hex for "Payload"
+
+    condition:
+        any of them
+}
