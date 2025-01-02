@@ -1,0 +1,46 @@
+import scapy.all as scapy
+import numpy as np
+from sklearn.ensemble import IsolationForest
+from collections import deque
+import time
+
+# Define the window size for the moving average
+WINDOW_SIZE = 100
+TRAFFIC_DATA = deque(maxlen=WINDOW_SIZE)
+
+# Function to capture and process packets
+def packet_callback(packet):
+    if packet.haslayer(scapy.IP):
+        # Extract relevant features: size of the packet, protocol, and source/destination IP
+        size = len(packet)
+        protocol = packet.proto
+        src_ip = packet[scapy.IP].src
+        dst_ip = packet[scapy.IP].dst
+        
+        # Store features as a list (could include more sophisticated features)
+        traffic_features = [size, protocol, src_ip.count('.'), dst_ip.count('.')]
+        
+        # Add the features to the traffic data list
+        TRAFFIC_DATA.append(traffic_features)
+        
+        if len(TRAFFIC_DATA) == WINDOW_SIZE:
+            # Convert the traffic data to a numpy array for analysis
+            data_array = np.array(TRAFFIC_DATA)
+            
+            # Apply anomaly detection using Isolation Forest
+            model = IsolationForest(contamination=0.05)  # 5% of the data expected to be anomalous
+            model.fit(data_array)
+            
+            # Predict anomalies
+            anomalies = model.predict(data_array)
+            
+            # If any anomaly is detected (label -1), print the suspicious packet
+            for i, label in enumerate(anomalies):
+                if label == -1:
+                    print(f"Suspicious traffic detected: {TRAFFIC_DATA[i]} (Packet {i+1})")
+                    print(f"Source IP: {src_ip}, Destination IP: {dst_ip}")
+                    print(f"Packet Size: {size} bytes, Protocol: {protocol}\n")
+                    break  # Trigger action for the first detected anomaly
+
+# Start sniffing packets (you can specify an interface if needed)
+scapy.sniff(prn=packet_callback, store=False, timeout=60)
