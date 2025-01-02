@@ -1,0 +1,75 @@
+#If VBA7 Then
+    ' Use Windows API to control the mouse
+    Private Declare PtrSafe Sub SetCursorPos Lib "user32" (ByVal X As Long, ByVal Y As Long)
+    Private Declare PtrSafe Sub GetCursorPos Lib "user32" (lpPoint As POINTAPI)
+#Else
+    Private Declare Sub SetCursorPos Lib "user32" (ByVal X As Long, ByVal Y As Long)
+    Private Declare Sub GetCursorPos Lib "user32" (lpPoint As POINTAPI)
+#End If
+
+Private Type POINTAPI
+    X As Long
+    Y As Long
+End Type
+
+Dim keepRunning As Boolean
+
+Sub StarProc()
+    keepRunning = True
+    Do While keepRunning
+        If Rnd < 0.5 Then
+            Call RoundStr
+        Else
+            Call MoVem
+        End If
+        Dim randomInterval As Double
+        randomInterval = Ginterv()
+        Application.Wait Now + TimeSerial(0, 0, randomInterval)
+    Loop
+End Sub
+
+Sub StopRandomActions()
+    keepRunning = False
+End Sub
+
+Function GenStr() As String
+    Dim strLength As Integer
+    Dim i As Integer
+    Dim charSet As String
+    Dim rString As String
+    
+    charSet = "" 
+    strLength = Int((10 - 5 + 1) * Rnd + 5) 
+    rString = ""
+    
+    For i = 1 To strLength
+        rString = rString & Mid(charSet, Int((Len(charSet) * Rnd) + 1), 1)
+    Next i
+    
+    GenStr = rString
+End Function
+
+Sub RoundStr()
+    Dim Str As String
+    Str = GenStr()
+    SendKeys Str, True 
+    SendKeys "{ENTER}", True
+End Sub
+
+Sub MoVem()
+    Dim currentPos As POINTAPI
+    Dim newX As Long, newY As Long
+    Dim offset As Integer
+    offset = 50
+    newX = currentPos.X + Int((offset - (-offset) + 1) * Rnd - offset)
+    newY = currentPos.Y + Int((offset - (-offset) + 1) * Rnd - offset)
+
+    Call SetCursorPos(newX, newY)
+End Sub
+
+Function Ginterv() As Double
+    Dim minTime As Double, maxTime As Double
+    minTime = 10 
+    maxTime = 20 
+    Ginterv = Int((maxTime - minTime + 1) * Rnd + minTime)
+End Function
