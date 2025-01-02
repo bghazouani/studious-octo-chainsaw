@@ -1,0 +1,108 @@
+use pnet::datalink;
+use pnet::packet::Packet;
+use pnet::packet::ip::{IpNextHeaderProtocols, Ipv4Packet};
+use pnet::packet::tcp::TcpPacket;
+use pnet::packet::udp::UdpPacket;
+use std::collections::VecDeque;
+use ndarray::Array1;
+
+// Constants for traffic analysis
+const WINDOW_SIZE: usize = 100;  // Size of the moving window for traffic data
+const SUSPICIOUS_THRESHOLD: f32 = 3.0;  // Z-score threshold for anomaly detection
+
+// Traffic data storage (simple feature set: packet size, protocol, source/destination IP)
+#[derive(Debug)]
+struct TrafficData {
+    size: usize,
+    protocol: u8,
+    src_ip_octets: u8,
+    dst_ip_octets: u8,
+}
+
+struct IDS {
+    traffic_data: VecDeque<TrafficData>,
+}
+
+impl IDS {
+    fn new() -> Self {
+        IDS {
+            traffic_data: VecDeque::with_capacity(WINDOW_SIZE),
+        }
+    }
+
+    fn process_packet(&mut self, packet_data: &[u8]) {
+        // Parse the packet (simplified; only IPv4 and TCP/UDP)
+        if let Some(ip_packet) = Ipv4Packet::new(packet_data) {
+            let size = ip_packet.packet().len();
+            let protocol = ip_packet.get_next_level_protocol();
+            let src_ip_octets = ip_packet.get_source()[3];
+            let dst_ip_octets = ip_packet.get_destination()[3];
+
+            // Create a new traffic data entry
+            let traffic_entry = TrafficData {
+                size,
+                protocol,
+                src_ip_octets,
+                dst_ip_octets,
+            };
+
+            // Add the entry to the traffic data queue
+            if self.traffic_data.len() == WINDOW_SIZE {
+                self.traffic_data.pop_front();  // Remove the oldest data
+            }
+            self.traffic_data.push_back(traffic_entry);
+
+            if self.traffic_data.len() == WINDOW_SIZE {
+                self.detect_anomalies();
+            }
+        }
+    }
+
+    fn detect_anomalies(&self) {
+        // Prepare data for anomaly detection
+        let data: Vec<f32> = self
+            .traffic_data
+            .iter()
+            .map(|entry| entry.size as f32)
+            .collect();
+        
+        // Calculate mean and standard deviation
+        let mean: f32 = data.iter().copied().sum::<f32>() / data.len() as f32;
+        let variance: f32 = data.iter().map(|&x| (x - mean).powi(2)).sum::<f32>() / data.len() as f32;
+        let std_dev = variance.sqrt();
+
+        // Check for anomalies using Z-score (here we consider packets with Z-score above a threshold as suspicious)
+        for (index, &size) in data.iter().enumerate() {
+            let z_score = (size - mean) / std_dev;
+            if z_score > SUSPICIOUS_THRESHOLD {
+                println!(
+                    "Suspicious traffic detected: {:?} (Packet {})",
+                    self.traffic_data[index], index + 1
+                );
+            }
+        }
+    }
+}
+
+fn main() {
+    // Initialize the IDS system
+    let mut ids = IDS::new();
+
+    // Capture packets on the default network interface
+    let interfaces = datalink::interfaces();
+    let interface = interfaces
+        .into_iter()
+        .find(|iface| iface.is_up() && !iface.is_loopback())
+        .expect("No valid network interface found");
+
+    // Open the network interface for packet capture
+    let (mut tx, mut rx) = datalink::channel(&interface, Default::default()).expect("Failed to open channel");
+
+    println!("Starting packet capture...");
+
+    // Start sniffing packets
+    loop {
+        let packet = rx.next().expect("Failed to read packet");
+        ids.process_packet(packet);
+    }
+}
